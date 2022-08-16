@@ -1,70 +1,280 @@
-# Getting Started with Create React App
+# React Hooks with Axios for Async-Await Requests
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+npm install axios
 
-## Available Scripts
+Axios is one of the most popular HTTP JavaScript client libraries - for many reasons. First of all, it’s isomorphic, meaning you can use it the same way, whether you’re running in a browser or in Node.js, even though HTTP APIs are different for both. On top of that, Axios is Promise-based, integrating well with modern async/await JavaScript syntax.
 
-In the project directory, you can run:
+Axios is a perfect choice for both your front end and back end due to features such as automatic JSON transforms or built-in request cancellation.
 
-### `npm start`
+Note: Working with hooks gets a bit more complicated when dealing with asynchronous code. Using async callbacks in useEffect() isn’t an option, as the method expects the return value, if present, to be a cleanup callback. With that said, you can still use async in useEffect() callback as follows:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```
+const useAsyncStuff = () => {
+ const [data, setData] = useState(null);
+ const [error, setError] = useState("");
+ const [loaded, setLoaded] = useState(false);
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+ useEffect(() => {
+   const loadAsyncStuff = async () => {
+     try {
+       const response = await fetch(/* ... */);
+       const json = await response.json();
 
-### `npm test`
+       setData(json);
+     } catch (error) {
+       setError(error);
+     } finally {
+       setLoaded(true);
+     }
+   };
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+   loadAsyncStuff();
+ }, []);
 
-### `npm run build`
+ return { data, error, loaded };
+};
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+All the async tasks are inside the inner loadAsyncStuff() function. This function is called immediately after declaration and saves information about its progress with state properties like loaded and error. If all async tasks succeed, the resulting data is saved to data; otherwise, the error is caught and saved to error. In both cases, loaded is set to true when the async task finishes. Wrapping the logic inside useEffect() ensures it only runs once.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Creating Axios Hooks
 
-### `npm run eject`
+```
+npm install axios
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+const useAxiosPost = (url, payload) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await axios.post(
+          url,
+          payload
+        );
+        setData(response.data);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+  return { data, error, loaded };
+};
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+You might also prefer the “traditional” Promise syntax, which can be a bit more compact.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```
+const useAxiosPost = (url, payload) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
-## Learn More
+  useEffect(() => {
+    axios
+      .post(url, payload)
+      .then((response) => setData(response.data))
+      .catch((error) => setError(error.message))
+      .finally(() => setLoaded(true));
+  }, []);
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+  return { data, error, loaded };
+};
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+The hook uses Axios’s post() shorthand method to send a POST request to the provided URL with given data. Aside from that, JSON-parsed response data is stored in data, and the error message is stored in error.
 
-### Code Splitting
+The hook can be used as follow:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```
+const App = () => {
+  const { data, error, loaded } = useAxiosPost(
+    "https://httpbin.org/post",
+    {
+      message: "Hello World",
+    }
+  );
+  const stringifiedData = useMemo(() => {
+    return JSON.stringify(data || {});
+  }, [data]);
 
-### Analyzing the Bundle Size
+  if (loaded) {
+    return error ? (
+      <span>Error: {error}</span>
+    ) : (
+      <p>{stringifiedData}</p>
+    );
+  }
+  return <span>Loading...</span>;
+};
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+The hook provides all necessary data to render the component throughout the fetching process.
 
-### Making a Progressive Web App
+Let’s change the post() method to request(), passing a complete request configuration including the request method. Additionally, return a cancel function that allows users to cancel the request.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```
+const useAxios = (url, method, payload) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const controllerRef = useRef(new AbortController());
+  const cancel = () => {
+    controllerRef.current.abort();
+  };
 
-### Advanced Configuration
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await axios.request({
+          data: payload,
+          signal: controllerRef.current.signal,
+          method,
+          url,
+        });
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+        setData(response.data);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
 
-### Deployment
+  return { cancel, data, error, loaded };
+};
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+From v0.22.0 onwards, Axios supports AbortController, making request canceling easier and deprecating its custom CancelToken API. To cancel a request with Axios, you first have to create a new AbortController instance. This controller allows aborting one or more HTTP requests. When used in React hook, it has to be wrapped in a useRef or similar, not to create a new instance on every re-render.
 
-### `npm run build` fails to minify
+The most important property of AbortController is signal, which holds an instance of AbortSignal and should be provided to the request(s) the controller is meant for. With the signal provided in Axios request config, canceling the request is a matter of calling the abort() method on the controller instance.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Extending integration with React Context
+
+Axios provides functionality to create separate instances of the library with different configurations. It allows you to use custom configs defining, e.g., base URL or default headers to be supplied with every request made through a given instance. It’s handy in larger apps when making many requests to the same origin or connecting with various APIs to reuse configuration.
+
+On top of that, Axios allows you to define interceptor functions for both the base and custom instances. These allow you to intercept the data before, e.g., the request is sent, or then() callback is called. As such, there are both request and response interceptors.
+
+To integrate Axios instances with React, you can use React Context. It’d make the instance available to all child components, from where useAxios() hooks will use it to handle the request. If no instance is available, the hook can always fall back to the default one available under axios. To implement this, start by creating a new context provider component:
+
+```
+const AxiosContext = createContext(null);
+const AxiosInstanceProvider = ({
+  config = {},
+  requestInterceptors = [],
+  responseInterceptors = [],
+  children,
+}) => {
+  const instanceRef = useRef(axios.create(config));
+
+  useEffect(() => {
+    requestInterceptors.forEach((interceptor) => {
+      instanceRef.current.interceptors.request.use(
+        interceptor
+      );
+    });
+    responseInterceptors.forEach((interceptor) => {
+      instanceRef.current.interceptors.response.use(
+        interceptor
+      );
+    });
+  }, []);
+
+  return (
+    <AxiosContext.Provider value={instanceRef.current}>
+      {children}
+    </AxiosContext.Provider>
+  );
+};
+```
+
+Inside the AxiosInstanceProvider component, the Axios instance is created using provided config and saved to instanceRef ref. All interceptors are registered inside the useEffect() callback to prevent unnecessary processing on re-renders. With this done, return to useAxios() to adjust the hook to use the context-provided Axios instance when available.
+
+```
+const useAxios = (url, method, payload) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const contextInstance = useContext(AxiosContext);
+  const instance = useMemo(() => {
+    return contextInstance || axios;
+  }, [contextInstance]);
+  const controllerRef = useRef(new AbortController());
+  const cancel = () => {
+    controllerRef.current.abort();
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await instance.request({
+          signal: controllerRef.current.signal,
+          data: payload,
+          method,
+          url,
+        });
+
+        setData(response.data);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
+  return { cancel, data, error, loaded };
+};
+```
+
+The context is loaded using useContext() hook to the contextInstance variable. The actual instance results from useMemo() computation and can return the default Axios instance if it’s not provided in the context. To use such a setup, make sure your app is wrapped inside an AxiosInstanceProvider component, at least a level higher than where you’ll use useAxios() Hook. You can provide config and different interceptors as component props.
+
+```
+const App = () => {
+  return (
+    <AxiosInstanceProvider
+      config={{ baseURL: "https://httpbin.org/" }}
+    >
+      <Test>Test</Test>
+    </AxiosInstanceProvider>
+  );
+};
+```
+
+Then, inside the child component, simply use the Hook like before. The use of context, sending, and processing the request will all happen in the background.
+
+```
+const Test = () => {
+  const { data, error, loaded } = useAxios(
+    "/post",
+    "POST",
+    {
+      message: "Hello World",
+    }
+  );
+  const stringifiedData = useMemo(() => {
+    return JSON.stringify(data || {});
+  }, [data]);
+
+  if (loaded) {
+    return error ? (
+      <span>Error: {error}</span>
+    ) : (
+      <p>{stringifiedData}</p>
+    );
+  }
+  return <span>Loading...</span>;
+};
+```
+
+Axios is an excellent library if you want consistent data-fetching experience across your front end and Node.js back end. For an HTTP client, it has many features and shortcuts to achieve the thing you want in the best and most pleasing way.
+
+Combining Axios with React can result in great abstraction on top of an asynchronous task. Thanks to React Hooks, the ergonomics and ease of use of such a setup are simply outstanding.
